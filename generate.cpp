@@ -5,6 +5,12 @@
 
 namespace ane_lm {
 
+// Effective context limit — KV cache capacity is the bottleneck.
+// Leave room for generation tokens.
+static constexpr int KV_CONTEXT_LIMIT = 2048;
+static constexpr int GENERATION_RESERVE = 256;
+static constexpr int MAX_PROMPT_TOKENS = KV_CONTEXT_LIMIT - GENERATION_RESERVE;
+
 void stream_generate(
     LLMModel& model,
     Tokenizer& tokenizer,
@@ -27,6 +33,16 @@ void stream_generate(
             combined += content + "\n";
         }
         prompt_tokens = tokenizer.encode(combined);
+    }
+
+    // Truncate prompt if it exceeds KV cache capacity.
+    // Keep the LAST N tokens so the most recent messages are preserved.
+    if ((int)prompt_tokens.size() > MAX_PROMPT_TOKENS) {
+        int original = (int)prompt_tokens.size();
+        int drop = original - MAX_PROMPT_TOKENS;
+        prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + drop);
+        fprintf(stderr, "[warn] Prompt truncated: %d -> %d tokens (dropped %d oldest)\n",
+                original, (int)prompt_tokens.size(), drop);
     }
 
     // Prefill
@@ -58,7 +74,7 @@ void stream_generate(
         generated_tokens.push_back(next_token);
         std::string piece = tokenizer.decode(next_token);
 
-        if (callback) {
+        if (callback && !piece.empty()) {
             GenerationResponse r;
             r.text = piece;
             r.token = next_token;
@@ -69,8 +85,8 @@ void stream_generate(
             callback(r);
         }
 
-        int pos = (int)prompt_tokens.size() + i;
-        logits = model.forward(next_token, pos);
+        int seq_pos = (int)prompt_tokens.size() + i;
+        logits = model.forward(next_token, seq_pos);
         if (!logits) {
             fprintf(stderr, "Forward failed during generation at step %d\n", i);
             return;
