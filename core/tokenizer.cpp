@@ -11,6 +11,34 @@
 
 namespace ane_lm {
 
+// Convert nlohmann::json to jinja::value recursively
+static jinja::value json_to_jinja(const nlohmann::json& j) {
+    if (j.is_null()) {
+        return jinja::mk_val<jinja::value_none>();
+    } else if (j.is_boolean()) {
+        return jinja::mk_val<jinja::value_bool>(j.get<bool>());
+    } else if (j.is_number_integer()) {
+        return jinja::mk_val<jinja::value_int>(j.get<int64_t>());
+    } else if (j.is_number_float()) {
+        return jinja::mk_val<jinja::value_float>(j.get<double>());
+    } else if (j.is_string()) {
+        return jinja::mk_val<jinja::value_string>(j.get<std::string>());
+    } else if (j.is_array()) {
+        auto arr = jinja::mk_val<jinja::value_array>();
+        for (auto& el : j) {
+            arr->push_back(json_to_jinja(el));
+        }
+        return arr;
+    } else if (j.is_object()) {
+        auto obj = jinja::mk_val<jinja::value_object>();
+        for (auto& [key, val] : j.items()) {
+            obj->insert(key, json_to_jinja(val));
+        }
+        return obj;
+    }
+    return jinja::mk_val<jinja::value_none>();
+}
+
 bool Tokenizer::init(const std::string& model_dir) {
     // Load tokenizer.json
     std::string path = model_dir + "/tokenizer.json";
@@ -85,7 +113,8 @@ std::string Tokenizer::decode(const std::vector<int>& ids) const {
 std::string Tokenizer::apply_chat_template(
     const std::vector<std::pair<std::string, std::string>>& messages,
     bool add_generation_prompt,
-    bool enable_thinking) const
+    bool enable_thinking,
+    const std::string& tools_json) const
 {
     if (chat_template_.empty()) {
         throw std::runtime_error("No chat template available");
@@ -114,6 +143,18 @@ std::string Tokenizer::apply_chat_template(
     ctx.set_val("enable_thinking", jinja::mk_val<jinja::value_bool>(enable_thinking));
     ctx.set_val("bos_token", jinja::mk_val<jinja::value_string>(bos_token_));
     ctx.set_val("eos_token", jinja::mk_val<jinja::value_string>(eos_token_));
+
+    // Inject tools if provided (for function calling support)
+    if (!tools_json.empty()) {
+        try {
+            auto tools_parsed = nlohmann::json::parse(tools_json);
+            if (tools_parsed.is_array()) {
+                ctx.set_val("tools", json_to_jinja(tools_parsed));
+            }
+        } catch (...) {
+            // Invalid tools JSON, skip — template will treat tools as undefined
+        }
+    }
 
     // Execute template
     jinja::runtime rt(ctx);

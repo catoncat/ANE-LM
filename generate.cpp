@@ -12,12 +12,13 @@ void stream_generate(
     int max_tokens,
     bool enable_thinking,
     const SamplingParams& sampling,
-    std::function<void(const GenerationResponse&)> callback)
+    std::function<void(const GenerationResponse&)> callback,
+    const std::string& tools_json)
 {
     // Tokenize with chat template
     std::vector<int> prompt_tokens;
     if (tokenizer.has_chat_template()) {
-        std::string formatted = tokenizer.apply_chat_template(messages, true, enable_thinking);
+        std::string formatted = tokenizer.apply_chat_template(messages, true, enable_thinking, tools_json);
         prompt_tokens = tokenizer.encode(formatted);
     } else {
         // Fallback: concatenate all message contents

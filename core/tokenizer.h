@@ -27,10 +27,12 @@ public:
     // Apply Jinja chat template to messages, returns formatted prompt string.
     // messages: vector of {role, content} pairs
     // add_generation_prompt: append assistant turn opening
+    // tools_json: optional JSON string of tools array for function calling
     std::string apply_chat_template(
         const std::vector<std::pair<std::string, std::string>>& messages,
         bool add_generation_prompt = true,
-        bool enable_thinking = false) const;
+        bool enable_thinking = false,
+        const std::string& tools_json = "") const;
 
     bool has_chat_template() const { return !chat_template_.empty(); }
 

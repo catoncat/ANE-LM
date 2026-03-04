@@ -27,7 +27,8 @@ void stream_generate(
     int max_tokens = 0,
     bool enable_thinking = false,
     const SamplingParams& sampling = {},
-    std::function<void(const GenerationResponse&)> callback = nullptr);
+    std::function<void(const GenerationResponse&)> callback = nullptr,
+    const std::string& tools_json = "");
 
 // Single-prompt convenience overload
 void stream_generate(
